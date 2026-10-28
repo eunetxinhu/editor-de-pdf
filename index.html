@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Tools - Privacidade Total</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gray: {
+                            900: '#111827',
+                            800: '#1f2937',
+                            700: '#374151',
+                            600: '#4b5563',
+                            500: '#6b7280',
+                            400: '#9ca3af',
+                            300: '#d1d5db',
+                            200: '#e5e7eb',
+                            100: '#f3f4f6',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- PDF-Lib para manipulação -->
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    
+    <!-- PDF.js para renderização (usado na compressão) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Custom Scrollbar for dark mode */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+        .drop-zone { transition: all 0.3s ease; }
+        .drop-zone.dragover { background-color: rgba(55, 65, 81, 0.8); border-color: #3b82f6; }
+        
+        .tab-content { display: none; animation: fadeIn 0.3s ease-in-out; }
+        .tab-content.active { display: block; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col">
+
+    <!-- Header / Navbar -->
+    <header class="bg-gray-800 border-b border-gray-700 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <svg class="h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span class="ml-3 font-bold text-xl tracking-tight text-white">PDF Tools PRO</span>
+                </div>
+            </div>
+            
+            <!-- Tabs Navigation -->
+            <nav class="flex overflow-x-auto space-x-1 pb-2 sm:pb-0" aria-label="Tabs">
+                <button onclick="switchTab('contract')" id="tab-btn-contract" class="nav-btn bg-gray-900 text-blue-400 border-b-2 border-blue-500 px-3 py-2 font-medium text-sm rounded-t-lg transition-colors whitespace-nowrap">Gerar Contrato</button>
+                <button onclick="switchTab('merge')" id="tab-btn-merge" class="nav-btn text-gray-400 hover:text-gray-200 px-3 py-2 font-medium text-sm transition-colors whitespace-nowrap">Mesclar PDFs</button>
+                <button onclick="switchTab('extract')" id="tab-btn-extract" class="nav-btn text-gray-400 hover:text-gray-200 px-3 py-2 font-medium text-sm transition-colors whitespace-nowrap">Extrair Páginas</button>
+                <button onclick="switchTab('image')" id="tab-btn-image" class="nav-btn text-gray-400 hover:text-gray-200 px-3 py-2 font-medium text-sm transition-colors whitespace-nowrap">Converter Imagem</button>
+                <button onclick="switchTab('compress')" id="tab-btn-compress" class="nav-btn text-gray-400 hover:text-gray-200 px-3 py-2 font-medium text-sm transition-colors whitespace-nowrap">Comprimir PDF</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-4xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+        <div class="bg-gray-800 rounded-xl shadow-xl border border-gray-700 overflow-hidden">
+            
+            <!-- TAB 1: GERAR CONTRATO -->
+            <div id="tab-contract" class="tab-content active p-6">
+                <h2 class="text-2xl font-bold mb-2">Gerar Contrato</h2>
+                <p class="text-gray-400 mb-6 text-sm">Junte imagens e PDFs em um único documento. As imagens serão ajustadas para o tamanho A4.</p>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Nome da Pessoa/Empresa</label>
+                    <input type="text" id="contract-name" placeholder="Ex: João da Silva" class="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+
+                <div class="drop-zone border-2 border-dashed border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:bg-gray-700 mt-4" onclick="document.getElementById('file-contract').click()" id="drop-contract">
+                    <svg class="mx-auto h-10 w-10 text-gray-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                    <p class="text-gray-300">Clique ou arraste PDFs e Imagens aqui</p>
+                    <input type="file" id="file-contract" class="hidden" multiple accept="application/pdf, image/*" onchange="handleFiles('contract', this.files)">
+                </div>
+
+                <ul id="list-contract" class="mt-4 space-y-2 max-h-60 overflow-y-auto pr-2"></ul>
+
+                <button onclick="processContract()" id="btn-contract" class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span id="text-contract">Gerar e Baixar Contrato</span>
+                    <svg id="spin-contract" class="animate-spin ml-2 h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                </button>
+            </div>
+
+            <!-- TAB 2: MESCLAR PDFs -->
+            <div id="tab-merge" class="tab-content p-6">
+                <h2 class="text-2xl font-bold mb-2">Mesclar PDFs</h2>
+                <p class="text-gray-400 mb-6 text-sm">Combine vários arquivos PDF em um único documento, na ordem escolhida.</p>
+                
+                <div class="drop-zone border-2 border-dashed border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:bg-gray-700" onclick="document.getElementById('file-merge').click()" id="drop-merge">
+                    <p class="text-gray-300">Clique ou arraste múltiplos arquivos PDF aqui</p>
+                    <input type="file" id="file-merge" class="hidden" multiple accept="application/pdf" onchange="handleFiles('merge', this.files)">
+                </div>
+
+                <ul id="list-merge" class="mt-4 space-y-2 max-h-60 overflow-y-auto pr-2"></ul>
+
+                <button onclick="processMerge()" id="btn-merge" class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span id="text-merge">Mesclar e Baixar</span>
+                    <svg id="spin-merge" class="animate-spin ml-2 h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                </button>
+            </div>
+
+            <!-- TAB 3: EXTRAIR PÁGINAS -->
+            <div id="tab-extract" class="tab-content p-6">
+                <h2 class="text-2xl font-bold mb-2">Extrair Páginas</h2>
+                <p class="text-gray-400 mb-6 text-sm">Separe páginas específicas de um PDF para criar um novo arquivo.</p>
+                
+                <div class="drop-zone border-2 border-dashed border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:bg-gray-700" onclick="document.getElementById('file-extract').click()" id="drop-extract">
+                    <p class="text-gray-300" id="label-extract">Selecione 1 arquivo PDF</p>
+                    <input type="file" id="file-extract" class="hidden" accept="application/pdf" onchange="handleFiles('extract', this.files)">
+                </div>
+
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Páginas para extrair (ex: 1, 3, 5-7)</label>
+                    <input type="text" id="extract-pages" placeholder="1, 3, 5-7" class="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <button onclick="processExtract()" id="btn-extract" class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span id="text-extract">Extrair e Baixar</span>
+                    <svg id="spin-extract" class="animate-spin ml-2 h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                </button>
+            </div>
+
+            <!-- TAB 4: CONVERTER IMAGEM -->
+            <div id="tab-image" class="tab-content p-6">
+                <h2 class="text-2xl font-bold mb-2">Converter Imagem</h2>
+                <p class="text-gray-400 mb-6 text-sm">Converta imagens entre os formatos JPG, PNG e WEBP localmente.</p>
+                
+                <div class="drop-zone border-2 border-dashed border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:bg-gray-700" onclick="document.getElementById('file-image').click()" id="drop-image">
+                    <p class="text-gray-300">Selecione as imagens para converter</p>
+                    <input type="file" id="file-image" class="hidden" multiple accept="image/*" onchange="handleFiles('image', this.files)">
+                </div>
+
+                <ul id="list-image" class="mt-4 space-y-2 max-h-40 overflow-y-auto pr-2"></ul>
+
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Formato de Saída</label>
+                    <select id="image-format" class="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="image/jpeg">JPG / JPEG</option>
+                        <option value="image/png">PNG</option>
+                        <option value="image/webp">WEBP</option>
+                    </select>
+                </div>
+
+                <button onclick="processImage()" id="btn-image" class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span id="text-image">Converter e Baixar</span>
+                    <svg id="spin-image" class="animate-spin ml-2 h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                </button>
+            </div>
+
+            <!-- TAB 5: COMPRIMIR PDF -->
+            <div id="tab-compress" class="tab-content p-6">
+                <h2 class="text-2xl font-bold mb-2">Comprimir PDF</h2>
+                <p class="text-gray-400 mb-6 text-sm">Reduza o tamanho do seu PDF re-renderizando as páginas como imagens otimizadas.</p>
+                
+                <div class="bg-yellow-900/30 border-l-4 border-yellow-600 p-4 mb-4 rounded text-sm text-yellow-200">
+                    <strong>Aviso:</strong> A compressão converte texto em imagens para economizar espaço. O texto não poderá mais ser selecionado ou copiado.
+                </div>
+
+                <div class="drop-zone border-2 border-dashed border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:bg-gray-700" onclick="document.getElementById('file-compress').click()" id="drop-compress">
+                    <p class="text-gray-300" id="label-compress">Selecione 1 arquivo PDF</p>
+                    <input type="file" id="file-compress" class="hidden" accept="application/pdf" onchange="handleFiles('compress', this.files)">
+                </div>
+
+                <div class="mt-6">
+                    <div class="flex justify-between mb-1">
+                        <label class="text-sm font-medium text-gray-300">Qualidade de Compressão</label>
+                        <span id="compress-val-label" class="text-sm text-blue-400 font-bold">Média (60%)</span>
+                    </div>
+                    <input type="range" id="compress-quality" min="0.1" max="1.0" step="0.1" value="0.6" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" oninput="updateQualityLabel()">
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>Menor Arquivo (Baixa Qualidade)</span>
+                        <span>Maior Arquivo (Alta Qualidade)</span>
+                    </div>
+                </div>
+
+                <button onclick="processCompress()" id="btn-compress" class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span id="text-compress">Comprimir e Baixar</span>
+                    <svg id="spin-compress" class="animate-spin ml-2 h-5 w-5 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                </button>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"></div>
+
+    <script>
+        // === CONFIGURAÇÕES E ESTADO ===
+        document.addEventListener('DOMContentLoaded', () => {
+            // Configurar worker do PDF.js
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+            
+            // Configurar Drag and Drop para todas as zonas
+            ['contract', 'merge', 'extract', 'image', 'compress'].forEach(tab => {
+                const zone = document.getElementById(`drop-${tab}`);
+                zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+                zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+                zone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    zone.classList.remove('dragover');
+                    if (e.dataTransfer.files.length > 0) {
+                        handleFiles(tab, e.dataTransfer.files);
+                    }
+                });
+            });
+
+            updateUI('contract');
+            updateUI('merge');
+            updateUI('extract');
+            updateUI('image');
+            updateUI('compress');
+        });
+
+        const state = {
+            contract: [],
+            merge: [],
+            extract: null,
+            image: [],
+            compress: null
+        };
+
+        // === NAVEGAÇÃO DE ABAS ===
+        function switchTab(tabId) {
+            // Esconder todos os conteúdos
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            // Resetar estilos dos botões
+            document.querySelectorAll('.nav-btn').forEach(el => {
+                el.classList.remove('bg-gray-900', 'text-blue-400', 'border-b-2', 'border-blue-500');
+                el.classList.add('text-gray-400');
+            });
+
+            // Ativar aba selecionada
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+            const btn = document.getElementById(`tab-btn-${tabId}`);
+            btn.classList.remove('text-gray-400');
+            btn.classList.add('bg-gray-900', 'text-blue-400', 'border-b-2', 'border-blue-500');
+        }
+
+        // === UTILITÁRIOS ===
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgColor = type === 'success' ? 'bg-green-600' : (type === 'error' ? 'bg-red-600' : 'bg-blue-600');
+            
+            toast.className = `${bgColor} text-white px-4 py-3 rounded shadow-lg transform transition-all duration-300 translate-y-10 opacity-0 flex items-center`;
+            toast.innerHTML = `
+                <span class="mr-2">${type === 'success' ? '✅' : '⚠️'}</span>
+                <span>${message}</span>
+            `;
+            
+            container.appendChild(toast);
+            
+            // Animate in
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-10', 'opacity-0');
+            });
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function fileToBuffer(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        function fileToDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function setLoading(tab, isLoading, loadingText = 'Processando...') {
+            const btn = document.getElementById(`btn-${tab}`);
+            const textEl = document.getElementById(`text-${tab}`);
+            const spinEl = document.getElementById(`spin-${tab}`);
+            
+            const originalTexts = {
+                contract: 'Gerar e Baixar Contrato',
+                merge: 'Mesclar e Baixar',
+                extract: 'Extrair e Baixar',
+                image: 'Converter e Baixar',
+                compress: 'Comprimir e Baixar'
+            };
+
+            if (isLoading) {
+                btn.disabled = true;
+                textEl.textContent = loadingText;
+                spinEl.classList.remove('hidden');
+            } else {
+                updateUI(tab); // Restores disabled state based on files
+                textEl.textContent = originalTexts[tab];
+                spinEl.classList.add('hidden');
+            }
+        }
+
+        function updateQualityLabel() {
+            const val = parseFloat(document.getElementById('compress-quality').value);
+            const label = document.getElementById('compress-val-label');
+            if (val <= 0.3) label.textContent = `Baixa (${val * 100}%)`;
+            else if (val <= 0.7) label.textContent = `Média (${Math.round(val * 100)}%)`;
+            else label.textContent = `Alta (${val * 100}%)`;
+        }
+
+        // === GERENCIAMENTO DE ARQUIVOS ===
+        function handleFiles(tab, files) {
+            const fileArray = Array.from(files);
+            
+            if (tab === 'contract') {
+                const valid = fileArray.filter(f => f.type === 'application/pdf' || f.type.startsWith('image/'));
+                if(valid.length === 0) return showToast('Apenas PDFs e Imagens são permitidos.', 'error');
+                state.contract = [...state.contract, ...valid];
+            } else if (tab === 'merge') {
+                const valid = fileArray.filter(f => f.type === 'application/pdf');
+                if(valid.length === 0) return showToast('Apenas PDFs são permitidos.', 'error');
+                state.merge = [...state.merge, ...valid];
+            } else if (tab === 'extract') {
+                if (fileArray[0].type !== 'application/pdf') return showToast('Selecione um PDF válido.', 'error');
+                state.extract = fileArray[0];
+            } else if (tab === 'image') {
+                const valid = fileArray.filter(f => f.type.startsWith('image/'));
+                if(valid.length === 0) return showToast('Apenas imagens são permitidas.', 'error');
+                state.image = [...state.image, ...valid];
+            } else if (tab === 'compress') {
+                if (fileArray[0].type !== 'application/pdf') return showToast('Selecione um PDF válido.', 'error');
+                state.compress = fileArray[0];
+            }
+            updateUI(tab);
+        }
+
+        function removeFile(tab, index) {
+            if (tab === 'extract' || tab === 'compress') state[tab] = null;
+            else state[tab].splice(index, 1);
+            updateUI(tab);
+        }
+
+        function updateUI(tab) {
+            const btn = document.getElementById(`btn-${tab}`);
+            const listEl = document.getElementById(`list-${tab}`);
+            const labelEl = document.getElementById(`label-${tab}`);
+            
+            if (tab === 'extract' || tab === 'compress') {
+                if (state[tab]) {
+                    labelEl.innerHTML = `<span class="text-blue-400 font-bold">${state[tab].name}</span><br><span class="text-sm text-gray-500 hover:text-red-400 underline mt-2 inline-block" onclick="event.stopPropagation(); removeFile('${tab}', 0)">Remover</span>`;
+                    btn.disabled = false;
+                } else {
+                    labelEl.textContent = 'Selecione 1 arquivo PDF';
+                    btn.disabled = true;
+                }
+            } else {
+                listEl.innerHTML = '';
+                state[tab].forEach((file, index) => {
+                    const li = document.createElement('li');
+                    li.className = 'bg-gray-700 px-3 py-2 rounded flex justify-between items-center text-sm';
+                    const isImg = file.type.startsWith('image/');
+                    li.innerHTML = `
+                        <div class="flex items-center truncate">
+                            <span class="mr-2">${isImg ? '🖼️' : '📄'}</span>
+                            <span class="truncate" title="${file.name}">${file.name}</span>
+                        </div>
+                        <button onclick="removeFile('${tab}', ${index})" class="text-red-400 hover:text-red-300 ml-2 font-bold bg-gray-800 rounded px-2">&times;</button>
+                    `;
+                    listEl.appendChild(li);
+                });
+                btn.disabled = state[tab].length === 0;
+            }
+        }
+
+        // Converte qualquer imagem via Canvas para um formato seguro para o PDF-lib (JPEG)
+        async function imageToSafePDFBytes(file) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    // Exportar como JPEG base64
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                    // Converter de volta para Uint8Array
+                    fetch(dataUrl)
+                        .then(res => res.arrayBuffer())
+                        .then(buffer => resolve(buffer))
+                        .catch(reject);
+                };
+                img.onerror = reject;
+                fileToDataURL(file).then(url => img.src = url).catch(reject);
+            });
+        }
+
+
+        // === LÓGICAS DE PROCESSAMENTO ===
+
+        // 1. GERAR CONTRATO
+        async function processContract() {
+            if (state.contract.length === 0) return;
+            
+            const rawName = document.getElementById('contract-name').value.trim();
+            const safeName = rawName ? rawName.replace(/[^a-z0-9]/gi, '_') : 'documento';
+            const fileName = `contrato: ${safeName}.pdf`;
+
+            setLoading('contract', true, 'Gerando documento...');
+
+            try {
+                const { PDFDocument } = PDFLib;
+                const pdfDoc = await PDFDocument.create();
+
+                // Tamanho A4 em pontos
+                const A4_WIDTH = 595.28;
+                const A4_HEIGHT = 841.89;
+
+                for (let i = 0; i < state.contract.length; i++) {
+                    const file = state.contract[i];
+                    
+                    if (file.type === 'application/pdf') {
+                        const buffer = await fileToBuffer(file);
+                        const loadedPdf = await PDFDocument.load(buffer);
+                        const copiedPages = await pdfDoc.copyPages(loadedPdf, loadedPdf.getPageIndices());
+                        copiedPages.forEach(page => pdfDoc.addPage(page));
+                    } else if (file.type.startsWith('image/')) {
+                        // Garantir que a imagem seja legível pelo pdf-lib passando por um canvas
+                        const imageBuffer = await imageToSafePDFBytes(file);
+                        const embeddedImage = await pdfDoc.embedJpg(imageBuffer);
+                        
+                        const imgDims = embeddedImage.scale(1);
+                        const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
+                        
+                        // Calcular proporção para caber na folha A4 com margem
+                        const margin = 40;
+                        const maxWidth = A4_WIDTH - (margin * 2);
+                        const maxHeight = A4_HEIGHT - (margin * 2);
+                        
+                        let scale = Math.min(maxWidth / imgDims.width, maxHeight / imgDims.height);
+                        if (scale > 1) scale = 1; // Não esticar além do original se for pequena
+                        
+                        const drawWidth = imgDims.width * scale;
+                        const drawHeight = imgDims.height * scale;
+                        
+                        // Centralizar
+                        const x = (A4_WIDTH - drawWidth) / 2;
+                        const y = (A4_HEIGHT - drawHeight) / 2;
+                        
+                        page.drawImage(embeddedImage, {
+                            x, y,
+                            width: drawWidth,
+                            height: drawHeight
+                        });
+                    }
+                }
+
+                const pdfBytes = await pdfDoc.save();
+                downloadBlob(new Blob([pdfBytes], { type: 'application/pdf' }), fileName);
+                showToast('Contrato gerado com sucesso!');
+                
+                // Limpar campos
+                state.contract = [];
+                document.getElementById('contract-name').value = '';
+                updateUI('contract');
+                
+            } catch (error) {
+                console.error(error);
+                showToast('Erro ao gerar o contrato.', 'error');
+            } finally {
+                setLoading('contract', false);
+            }
+        }
+
+        // 2. MESCLAR PDFs
+        async function processMerge() {
+            if (state.merge.length === 0) return;
+            setLoading('merge', true, 'Mesclando PDFs...');
+
+            try {
+                const { PDFDocument } = PDFLib;
+                const mergedPdf = await PDFDocument.create();
+
+                for (const file of state.merge) {
+                    const buffer = await fileToBuffer(file);
+                    const pdf = await PDFDocument.load(buffer);
+                    const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+                    copiedPages.forEach(page => mergedPdf.addPage(page));
+                }
+
+                const pdfBytes = await mergedPdf.save();
+                downloadBlob(new Blob([pdfBytes], { type: 'application/pdf' }), 'mesclado.pdf');
+                showToast('PDFs mesclados com sucesso!');
+                state.merge = [];
+            } catch (error) {
+                console.error(error);
+                showToast('Erro ao mesclar. Verifique se os PDFs são válidos.', 'error');
+            } finally {
+                setLoading('merge', false);
+            }
+        }
+
+        // 3. EXTRAIR PÁGINAS
+        async function processExtract() {
+            if (!state.extract) return;
+            
+            const rawRanges = document.getElementById('extract-pages').value.trim();
+            if (!rawRanges) return showToast('Digite as páginas que deseja extrair.', 'error');
+
+            setLoading('extract', true, 'Extraindo páginas...');
+
+            try {
+                const { PDFDocument } = PDFLib;
+                const buffer = await fileToBuffer(state.extract);
+                const sourcePdf = await PDFDocument.load(buffer);
+                const totalPages = sourcePdf.getPageCount();
+
+                // Lógica de Parse da String "1, 3, 5-7"
+                const pageIndices = new Set();
+                const parts = rawRanges.split(',').map(p => p.trim());
+                
+                for (const part of parts) {
+                    if (part.includes('-')) {
+                        let [start, end] = part.split('-').map(Number);
+                        if (isNaN(start) || isNaN(end)) continue;
+                        if (start > end) [start, end] = [end, start];
+                        for (let i = start; i <= end; i++) {
+                            if (i > 0 && i <= totalPages) pageIndices.add(i - 1);
+                        }
+                    } else {
+                        const num = Number(part);
+                        if (!isNaN(num) && num > 0 && num <= totalPages) {
+                            pageIndices.add(num - 1);
+                        }
+                    }
+                }
+
+                const pagesArray = Array.from(pageIndices).sort((a, b) => a - b);
+                if (pagesArray.length === 0) {
+                    throw new Error('Nenhuma página válida encontrada no intervalo.');
+                }
+
+                const newPdf = await PDFDocument.create();
+                const copiedPages = await newPdf.copyPages(sourcePdf, pagesArray);
+                copiedPages.forEach(page => newPdf.addPage(page));
+
+                const pdfBytes = await newPdf.save();
+                downloadBlob(new Blob([pdfBytes], { type: 'application/pdf' }), 'paginas_extraidas.pdf');
+                
+                showToast('Páginas extraídas com sucesso!');
+                state.extract = null;
+                document.getElementById('extract-pages').value = '';
+            } catch (error) {
+                console.error(error);
+                showToast(error.message || 'Erro ao extrair páginas.', 'error');
+            } finally {
+                setLoading('extract', false);
+            }
+        }
+
+        // 4. CONVERTER IMAGEM
+        async function processImage() {
+            if (state.image.length === 0) return;
+            
+            const format = document.getElementById('image-format').value;
+            const ext = format === 'image/jpeg' ? 'jpg' : (format === 'image/png' ? 'png' : 'webp');
+            
+            setLoading('image', true, 'Convertendo imagens...');
+
+            try {
+                for (let i = 0; i < state.image.length; i++) {
+                    const file = state.image[i];
+                    
+                    // Mostra progresso se for mais de 1
+                    if (state.image.length > 1) {
+                        document.getElementById('text-image').textContent = `Convertendo ${i+1}/${state.image.length}...`;
+                    }
+
+                    const dataUrl = await fileToDataURL(file);
+                    
+                    await new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0);
+                            
+                            canvas.toBlob((blob) => {
+                                if (blob) {
+                                    const origName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+                                    downloadBlob(blob, `${origName}.${ext}`);
+                                    resolve();
+                                } else {
+                                    reject(new Error('Falha no toBlob'));
+                                }
+                            }, format, 0.9);
+                        };
+                        img.onerror = reject;
+                        img.src = dataUrl;
+                    });
+                    
+                    // Pequeno delay para o navegador conseguir despachar múltiplos downloads
+                    if (state.image.length > 1) await new Promise(r => setTimeout(r, 500));
+                }
+                
+                showToast('Imagens convertidas com sucesso!');
+                state.image = [];
+            } catch (error) {
+                console.error(error);
+                showToast('Erro ao converter imagens.', 'error');
+            } finally {
+                setLoading('image', false);
+            }
+        }
+
+        // 5. COMPRIMIR PDF (PDF.js + PDF-lib)
+        async function processCompress() {
+            if (!state.compress) return;
+            
+            const quality = parseFloat(document.getElementById('compress-quality').value) || 0.6;
+            setLoading('compress', true, 'Iniciando Compressão...');
+            
+            try {
+                // 1. Carrega via PDF.js
+                const buffer = await fileToBuffer(state.compress);
+                const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+                const totalPages = pdf.numPages;
+                
+                // 2. Cria novo via PDF-lib
+                const { PDFDocument } = PDFLib;
+                const newPdf = await PDFDocument.create();
+                
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const scale = 1.5; // Resolução aceitável
+
+                for (let i = 1; i <= totalPages; i++) {
+                    document.getElementById('text-compress').textContent = `Comprimindo pg ${i}/${totalPages}...`;
+
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: scale });
+                    
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    
+                    await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+                    
+                    // Extrai como JPG comprimido
+                    const imgDataUrl = canvas.toDataURL('image/jpeg', quality);
+                    
+                    const imgRes = await fetch(imgDataUrl);
+                    const imgBuffer = await imgRes.arrayBuffer();
+                    
+                    const pdfImage = await newPdf.embedJpg(imgBuffer);
+                    
+                    // Tamanho original (sem o scale 1.5)
+                    const origViewport = page.getViewport({ scale: 1.0 });
+                    const newPage = newPdf.addPage([origViewport.width, origViewport.height]);
+                    
+                    newPage.drawImage(pdfImage, {
+                        x: 0,
+                        y: 0,
+                        width: origViewport.width,
+                        height: origViewport.height,
+                    });
+                }
+                
+                const pdfBytes = await newPdf.save();
+                const baseName = state.compress.name.replace(/\.pdf$/i, '');
+                
+                downloadBlob(new Blob([pdfBytes], { type: 'application/pdf' }), `${baseName}_comprimido.pdf`);
+                
+                showToast('PDF comprimido com sucesso!');
+                state.compress = null;
+            } catch (error) {
+                console.error(error);
+                showToast('Erro ao comprimir PDF. O arquivo pode ser protegido ou complexo.', 'error');
+            } finally {
+                setLoading('compress', false);
+            }
+        }
+    </script>
+</body>
+</html>
