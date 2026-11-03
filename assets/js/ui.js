@@ -13,13 +13,34 @@ const ACCEPT = {
 
 /* ---------- tema ---------- */
 function setupTheme() {
-    $('#theme-toggle').addEventListener('click', () => {
+    const btn = $('#theme-toggle');
+    btn.addEventListener('click', () => {
         const root = document.documentElement;
         const dark = root.dataset.theme
             ? root.dataset.theme === 'dark'
             : matchMedia('(prefers-color-scheme: dark)').matches;
-        root.dataset.theme = dark ? 'light' : 'dark';
-        try { localStorage.setItem('tema', root.dataset.theme); } catch (e) {}
+        const apply = () => {
+            root.dataset.theme = dark ? 'light' : 'dark';
+            try { localStorage.setItem('tema', root.dataset.theme); } catch (e) {}
+        };
+        if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return apply();
+        // o novo tema "cresce" em círculo a partir do botão
+        const r = btn.getBoundingClientRect();
+        const x = r.left + r.width / 2, y = r.top + r.height / 2;
+        const end = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+        document.startViewTransition(apply).ready.then(() => {
+            root.animate(
+                { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${end}px at ${x}px ${y}px)`] },
+                { duration: 600, easing: 'cubic-bezier(.4, 0, .2, 1)', pseudoElement: '::view-transition-new(root)' });
+        });
+    });
+}
+
+/** Marca no menu em pílula o atalho da página atual */
+function updatePillNav(id) {
+    $$('#pillnav a').forEach(a => {
+        const target = a.getAttribute('href').replace(/^#\/?/, '');
+        if (target === id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
 }
 
@@ -32,6 +53,7 @@ App.openTool = function (id, files) {
 App.route = function () {
     const id = location.hash.replace(/^#\/?/, '');
     const tool = App.tool(id);
+    updatePillNav(tool ? id : '');
     const main = $('#app');
     main.innerHTML = '';
     App.current?.destroy?.();
@@ -61,6 +83,10 @@ function toolIcon(tool) {
 
 /* ---------- tela inicial ---------- */
 let homeFilter = { cat: null, q: '' };
+const plain = t => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+function kpiIcon(paths) { return h('span.kpi-ico', icon(paths)); }
+
 function renderHome(main) {
     const grid = h('div');
     const search = h('input', {
@@ -75,42 +101,60 @@ function renderHome(main) {
         chips.append(h('button.chip', {
             type: 'button', 'aria-pressed': String(!homeFilter.cat),
             onclick: () => { homeFilter.cat = null; draw(); },
-        }, 'Todas'));
+        }, 'Todas', h('span.count', String(App.tools.length))));
         for (const c of App.categories) {
+            const n = App.tools.filter(t => t.cat === c.id).length;
             chips.append(h('button.chip', {
                 type: 'button', 'aria-pressed': String(homeFilter.cat === c.id),
-                style: { '--c': catColor(c.id) },
+                style: { '--cat': catColor(c.id) },
                 onclick: () => { homeFilter.cat = homeFilter.cat === c.id ? null : c.id; draw(); },
-            }, h('span.dot'), c.name));
+            }, h('span.dot'), c.name, h('span.count', String(n))));
         }
     }
 
     function draw() {
         drawChips();
         grid.innerHTML = '';
-        const q = homeFilter.q.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-        const match = t => !q || (t.title + ' ' + t.desc + ' ' + (t.keywords || ''))
-            .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(q);
+        const q = plain(homeFilter.q.trim());
+        const match = t => !q || plain(t.title + ' ' + t.desc + ' ' + (t.keywords || '')).includes(q);
         let count = 0;
         for (const c of App.categories) {
             if (homeFilter.cat && homeFilter.cat !== c.id) continue;
             const tools = App.tools.filter(t => t.cat === c.id && match(t));
             if (!tools.length) continue;
             count += tools.length;
-            grid.append(h('section.cat-block', { style: { '--c': catColor(c.id) } },
-                h('h2.cat-title', c.name),
+            grid.append(h('section.cat-block',
+                h('h2.cat-title', c.name, h('span.count', String(tools.length))),
                 h('div.tiles', tools.map(t =>
-                    h('a.tile', { href: '#/' + t.id, style: { '--c': catColor(t.cat) } },
+                    h('a.tile', { href: '#/' + t.id, style: { '--cat': catColor(t.cat) } },
+                        h('span.go', icon('<path d="M5 12h14M13 6l6 6-6 6"/>')),
                         toolIcon(t), h('h3', t.title), h('p', t.desc))))));
         }
         if (!count) grid.append(h('p.empty-search', 'Nenhuma ferramenta encontrada para essa busca.'));
     }
 
+    const cats = new Set(App.tools.map(t => t.cat)).size;
     main.append(h('div.home',
-        h('section.hero',
-            h('h1', 'Tudo o que você precisa fazer com PDF, sem enviar nada para a internet'),
-            h('p', 'Junte, divida, comprima, converta, assine e proteja seus documentos. O processamento acontece no seu navegador, então seus arquivos continuam só com você.')),
-        h('div.toolbar-home', h('div.search', icon('search'), search), chips),
+        h('div.page-title',
+            h('div',
+                h('h1', 'Ferramentas de PDF'),
+                h('p', 'Junte, divida, comprima, converta, assine e proteja seus documentos.')),
+            h('div.search', icon('search'), search)),
+        h('section.kpis', { 'aria-label': 'Resumo' },
+            h('div.kpi.featured',
+                h('div.kpi-top', kpiIcon('<path d="M12 3 5 6v5c0 4.5 3 8.4 7 9.6 4-1.2 7-5.1 7-9.6V6z"/><path d="m9 12 2 2 4-4"/>'), 'Privacidade total'),
+                h('div', h('div.kpi-value', 'Seus arquivos não saem daqui'),
+                    h('div.kpi-label', 'Tudo é processado no seu navegador, sem upload.'))),
+            h('div.kpi', { style: { '--k': 'var(--c-organizar)' } },
+                h('div.kpi-top', kpiIcon('<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>'), 'Ferramentas'),
+                h('div', h('div.kpi-value', String(App.tools.length)), h('div.kpi-label', 'prontas para usar'))),
+            h('div.kpi', { style: { '--k': 'var(--c-editar)' } },
+                h('div.kpi-top', kpiIcon('<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>'), 'Categorias'),
+                h('div', h('div.kpi-value', String(cats)), h('div.kpi-label', 'de organizar a proteger'))),
+            h('div.kpi', { style: { '--k': 'var(--c-otimizar)' } },
+                h('div.kpi-top', kpiIcon('<path d="M7 18a5 5 0 0 1-.9-9.9A6 6 0 0 1 17.7 9 4.5 4.5 0 0 1 18 18"/><path d="M4 4l16 16"/>'), 'Enviado a servidores'),
+                h('div', h('div.kpi-value', '0 MB'), h('div.kpi-label', 'funciona até sem conta')))),
+        h('div.segmented', chips),
         grid));
     draw();
 }
@@ -274,7 +318,7 @@ class ToolPage {
             onchange: e => { this.addFiles(e.target.files); e.target.value = ''; },
         });
 
-        this.root = h('div.tool', { style: { '--c': catColor(tool.cat) } },
+        this.root = h('div.tool', { style: { '--c': 'var(--accent)', '--cat': catColor(tool.cat) } },
             h('a.back', { href: '#/' }, icon('back'), 'Todas as ferramentas'),
             h('div.tool-head', toolIcon(tool), h('div', h('h1', tool.title), h('p', tool.longDesc || tool.desc))),
             this.body = h('div.tool-body'),
@@ -485,6 +529,7 @@ class ToolPage {
         this.body.className = 'tool-body no-files';
         this.body.innerHTML = '';
         this.body.append(h('div.result',
+            h('div.done-ico', icon('check')),
             h('h2', this.tool.doneTitle || 'Pronto!'),
             h('p', list.length > 1 ? `${list.length} arquivos foram reunidos em um .zip.` : out.name, ' · ', formatBytes(out.blob.size)),
             extra && h('p.stats', extra),
@@ -497,7 +542,7 @@ class ToolPage {
                 h('div.chips', next.map(id => {
                     const t = App.tool(id);
                     return h('button.chip', {
-                        type: 'button', style: { '--c': catColor(t.cat) },
+                        type: 'button', style: { '--cat': catColor(t.cat) },
                         onclick: () => App.openTool(id, [outFile]),
                     }, h('span.dot'), t.title);
                 }))) : null));
