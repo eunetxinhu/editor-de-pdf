@@ -407,7 +407,7 @@ function openSignatureModal(onDone) {
     };
 
     root.append(h('div.modal-bg', { onclick: e => { if (e.target.classList.contains('modal-bg')) close(); } },
-        h('div.modal', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Criar assinatura', style: { '--c': 'var(--c-editar)' } },
+        h('div.modal', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Criar assinatura', style: { '--c': 'var(--accent)' } },
             h('h2', 'Criar assinatura'),
             tabs,
             panes.draw, panes.type, panes.upload,

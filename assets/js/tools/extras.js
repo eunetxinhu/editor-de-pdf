@@ -10,28 +10,26 @@ App.register({
     icon: ICONS.file + '<path d="M8 13h8M8 17h5"/>',
     accept: 'pdf+image',
     multiple: true,
+    view: 'pages',
+    pagesMode: 'organize',
     actionLabel: 'Gerar contrato',
     doneTitle: 'Contrato gerado',
-    defaults: { name: '', size: 'a4', orient: 'portrait', margin: 20 },
+    defaults: { name: '' },
+    pagesHint: ctx => `${ctx.pages.length} ${ctx.pages.length === 1 ? 'página' : 'páginas'} · arraste para reordenar`,
+    validate: ctx => ctx.pages.length ? null : 'O contrato ficou sem páginas.',
     options(ctx) {
         const o = ctx.opts;
         return h('div', { style: { display: 'grid', gap: '14px' } },
             F.field('Nome do beneficiário', F.text(o.name, v => o.name = v, { placeholder: 'Ex.: João da Silva' }),
                 'Usado no nome do arquivo: "contrato - Nome.pdf".'),
-            F.note('As imagens são ajustadas a uma folha A4 com margem. Os PDFs entram com as páginas originais, na ordem dos cartões.'));
+            h('div.tool-buttons',
+                h('button.btn', { type: 'button', onclick: () => { ctx.pages.reverse(); ctx.refreshPages(); } }, 'Inverter ordem'),
+                h('button.btn', { type: 'button', onclick: () => { ctx.pages = []; ctx.buildPages(); ctx.refreshPages(); } }, 'Desfazer tudo')),
+            F.note('Cada página dos PDFs e cada foto aparece separada: arraste para mudar a ordem, gire ou exclua. As fotos são ajustadas a uma folha A4 com margem.'));
     },
     async run(ctx) {
-        const out = await PDFLib.PDFDocument.create();
-        for (let i = 0; i < ctx.files.length; i++) {
-            const f = ctx.files[i];
-            ctx.progress(i / ctx.files.length, `Adicionando ${f.file.name}...`);
-            if (isPdf(f.file)) {
-                const src = await PDF.load(f.bytes);
-                (await out.copyPages(src, src.getPageIndices())).forEach(p => out.addPage(p));
-            } else {
-                await addImagePage(out, f.file, { size: 'a4', orient: 'portrait', margin: 40 });
-            }
-        }
+        const out = await buildFromPages(ctx, { size: 'a4', orient: 'portrait', margin: 40 });
+        ctx.progress(0.95, 'Salvando...');
         const name = ctx.opts.name.trim();
         return { blob: pdfBlob(await PDF.save(out)), name: safeFileName(name ? `contrato - ${name}` : 'contrato') + '.pdf' };
     },
