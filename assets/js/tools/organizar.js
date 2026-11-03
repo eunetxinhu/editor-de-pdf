@@ -225,7 +225,7 @@ App.register({
 });
 
 /* ---------- Organizar PDF ---------- */
-async function buildFromPages(ctx) {
+async function buildFromPages(ctx, imageOpts = { size: 'a4', orient: 'auto', margin: 40 }) {
     const out = await PDFLib.PDFDocument.create();
     const cache = new Map();
     let lastSize = PDF.A4;
@@ -235,6 +235,14 @@ async function buildFromPages(ctx) {
         if (p.blank) {
             const page = out.addPage(lastSize);
             if (p.rot) page.setRotation(PDFLib.degrees(p.rot));
+            continue;
+        }
+        if (p.image) {
+            await addImagePage(out, p.file.file, imageOpts);
+            const page = out.getPage(out.getPageCount() - 1);
+            if (p.rot) page.setRotation(PDFLib.degrees(p.rot));
+            const { width, height } = page.getSize();
+            lastSize = [width, height];
             continue;
         }
         if (!cache.has(p.file)) cache.set(p.file, await PDF.load(p.file.bytes));

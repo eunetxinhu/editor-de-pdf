@@ -407,7 +407,13 @@ class ToolPage {
     buildPages() {
         const existing = new Set(this.pages.map(p => p.file));
         for (const f of this.files) {
-            if (existing.has(f) || !f.pageCount) continue;
+            if (existing.has(f)) continue;
+            // uma imagem vira uma página
+            if (!f.pageCount && isImage(f.file)) {
+                this.pages.push({ key: 'p' + (++this.keySeq), file: f, index: 0, rot: 0, sel: false, image: true });
+                continue;
+            }
+            if (!f.pageCount) continue;
             for (let i = 0; i < f.pageCount; i++) {
                 this.pages.push({ key: 'p' + (++this.keySeq), file: f, index: i, rot: 0, sel: false });
             }
@@ -637,7 +643,7 @@ class ToolPage {
         const head = h('div.ws-head',
             h('span.meta', t.pagesHint?.(this) || `${this.pages.length} páginas`),
             h('div.actions', t.pagesActions?.(this) || null,
-                (t.multiple || t.addMore) ? h('button.btn.btn-sm', { type: 'button', onclick: () => this.pick() }, icon('plus'), 'Adicionar PDF')
+                (t.multiple || t.addMore) ? h('button.btn.btn-sm', { type: 'button', onclick: () => this.pick() }, icon('plus'), t.accept === 'pdf' ? 'Adicionar PDF' : 'Adicionar arquivos')
                     : h('button.btn.btn-sm', { type: 'button', onclick: () => this.pick() }, 'Trocar arquivo')));
         ws.append(head);
 
@@ -736,6 +742,13 @@ class ToolPage {
         try {
             p.file.thumbs = p.file.thumbs || {};
             let src = p.file.thumbs[p.index];
+            if (!src && p.image) {
+                const bmp = await loadImageBitmap(p.file.file);
+                const s = 180 / bmp.width;
+                src = h('canvas', { width: 180, height: Math.max(1, Math.round(bmp.height * s)) });
+                src.getContext('2d').drawImage(bmp, 0, 0, src.width, src.height);
+                p.file.thumbs[0] = src;
+            }
             if (!src) src = p.file.thumbs[p.index] = (await PDF.render(p.file.doc, p.index + 1, { width: 180 })).canvas;
             const c = h('canvas', { width: src.width, height: src.height });
             c.getContext('2d').drawImage(src, 0, 0);
