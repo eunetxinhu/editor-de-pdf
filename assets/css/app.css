@@ -807,6 +807,7 @@ input[type="color"] { width: 46px; height: 42px; padding: 3px; border: 0; border
 .result p { margin: 0 0 18px; color: var(--muted); }
 .result .stats { font-weight: 600; color: var(--ink); }
 .result .stats .gain { color: var(--ok); }
+.result .batch-errors { color: var(--danger); font-weight: 500; font-size: .86rem; }
 .result .btn-big { max-width: 360px; }
 .result .secondary { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
 .continue { margin-top: 28px; text-align: left; border-top: 1px solid var(--rule); padding-top: 18px; }
@@ -887,7 +888,15 @@ input[type="color"] { width: 46px; height: 42px; padding: 3px; border: 0; border
 .item.crop { outline: 2px solid var(--accent); cursor: move; box-shadow: 0 0 0 9999px rgba(10, 12, 18, .5); }
 .item.crop .rs { display: grid; }
 
+.item svg { width: 100%; height: 100%; display: block; pointer-events: none; }
+.draw-layer { position: absolute; inset: 0; cursor: crosshair; touch-action: none; z-index: 5; }
+.nav-sep { width: 1px; height: 20px; background: var(--rule-strong); margin: 0 4px; }
+.btn[aria-pressed="true"] { background: var(--pill); color: var(--pill-ink); }
+
 .sig-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.sig-wrap { position: relative; }
+.sig-wrap .mini-btn { position: absolute; top: -8px; right: -8px; width: 22px; height: 22px; }
+.sig-wrap .mini-btn svg { width: 10px; height: 10px; }
 .sig-thumb {
     width: 130px; height: 64px;
     border: 1.5px solid var(--rule);

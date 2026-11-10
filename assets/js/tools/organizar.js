@@ -32,11 +32,31 @@ function selectionButtons(ctx) {
     return [
         h('button.btn.btn-sm', { type: 'button', onclick: () => set(p => p.sel = true) }, 'Todas'),
         h('button.btn.btn-sm', { type: 'button', onclick: () => set(p => p.sel = false) }, 'Nenhuma'),
+        h('button.btn.btn-sm', { type: 'button', onclick: () => set(p => p.sel = p.index % 2 === 0) }, 'Ímpares'),
+        h('button.btn.btn-sm', { type: 'button', onclick: () => set(p => p.sel = p.index % 2 === 1) }, 'Pares'),
         h('button.btn.btn-sm', { type: 'button', onclick: () => set(p => p.sel = !p.sel) }, 'Inverter'),
     ];
 }
 
 /* ---------- Juntar PDF ---------- */
+/** Cria os marcadores (índice lateral do leitor de PDF): um por entrada { title, page } */
+function addOutline(doc, entries) {
+    const { PDFName, PDFHexString } = PDFLib;
+    const ctx = doc.context;
+    const root = ctx.nextRef();
+    const refs = entries.map(() => ctx.nextRef());
+    entries.forEach((e, i) => {
+        const item = ctx.obj({ Parent: root, Dest: [e.page.ref, PDFName.of('Fit')] });
+        item.set(PDFName.of('Title'), PDFHexString.fromText(e.title));
+        if (i > 0) item.set(PDFName.of('Prev'), refs[i - 1]);
+        if (i < refs.length - 1) item.set(PDFName.of('Next'), refs[i + 1]);
+        ctx.assign(refs[i], item);
+    });
+    ctx.assign(root, ctx.obj({ Type: 'Outlines', First: refs[0], Last: refs[refs.length - 1], Count: refs.length }));
+    doc.catalog.set(PDFName.of('Outlines'), root);
+    doc.catalog.set(PDFName.of('PageMode'), PDFName.of('UseOutlines'));
+}
+
 App.register({
     id: 'merge',
     cat: 'organizar',
@@ -48,22 +68,35 @@ App.register({
     multiple: true,
     actionLabel: 'Juntar PDF',
     doneTitle: 'Seus PDFs foram juntados',
-    defaults: { name: 'pdf-unido' },
+    defaults: { name: 'pdf-unido', outline: true, duplex: false },
     validate: ctx => ctx.files.length < 2 ? 'Adicione pelo menos 2 PDFs.' : null,
     options(ctx) {
+        const pages = ctx.files.reduce((t, f) => t + (f.pageCount || 0), 0);
         return h('div', { style: { display: 'grid', gap: '14px' } },
-            F.field('Nome do arquivo final', F.text(ctx.opts.name, v => ctx.opts.name = v)),
+            F.field('Nome do arquivo final', F.text(ctx.opts.name, v => ctx.opts.name = v), `O arquivo final terá ${pages} páginas.`),
+            F.check('Criar marcadores com o nome de cada arquivo (índice lateral no leitor de PDF)', ctx.opts.outline, v => ctx.opts.outline = v),
+            F.check('Começar cada arquivo numa folha nova na impressão frente e verso (insere página em branco quando preciso)', ctx.opts.duplex, v => ctx.opts.duplex = v),
             F.note('A ordem dos cartões é a ordem das páginas no arquivo final. Arraste para reorganizar.'));
     },
+    resultInfo: ctx => ctx.state.blanks ? `${ctx.state.blanks} ${ctx.state.blanks === 1 ? 'página em branco foi inserida' : 'páginas em branco foram inseridas'} para a impressão frente e verso.` : null,
     async run(ctx) {
         const out = await PDFLib.PDFDocument.create();
+        const marks = [];
+        ctx.state.blanks = 0;
         for (let i = 0; i < ctx.files.length; i++) {
             const f = ctx.files[i];
             ctx.progress(i / ctx.files.length, `Juntando ${f.file.name}...`);
             const src = await PDF.load(f.bytes);
             const pages = await out.copyPages(src, src.getPageIndices());
+            if (ctx.opts.duplex && out.getPageCount() % 2 === 1) {
+                const { width, height } = out.getPage(out.getPageCount() - 1).getSize();
+                out.addPage([width, height]);
+                ctx.state.blanks++;
+            }
             pages.forEach(p => out.addPage(p));
+            if (pages.length) marks.push({ title: baseName(f.file.name), page: pages[0] });
         }
+        if (ctx.opts.outline && marks.length) addOutline(out, marks);
         ctx.progress(0.95, 'Salvando...');
         return { blob: pdfBlob(await PDF.save(out)), name: safeFileName(ctx.opts.name || 'pdf-unido') + '.pdf' };
     },

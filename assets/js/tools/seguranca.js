@@ -20,12 +20,15 @@ App.register({
     id: 'protect',
     cat: 'seguranca',
     title: 'Proteger PDF',
-    desc: 'Coloque uma senha no PDF para impedir que outras pessoas abram o arquivo.',
+    desc: 'Coloque uma senha em um ou vários PDFs para impedir que outras pessoas abram.',
     keywords: 'senha criptografar bloquear',
     icon: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
     accept: 'pdf',
+    multiple: true,
+    sortable: false,
     actionLabel: 'Proteger PDF',
-    doneTitle: 'Seu PDF está protegido',
+    doneTitle: 'Proteção aplicada',
+    zipName: () => 'pdfs-protegidos.zip',
     next: ['merge', 'compress'],
     defaults: { pass: '', pass2: '', print: true, copy: true, edit: true },
     validate(ctx) {
@@ -44,10 +47,9 @@ App.register({
                 F.check('Editar o documento', ctx.opts.edit, v => ctx.opts.edit = v)),
             F.note('Criptografia AES de 256 bits. ', h('b', 'Guarde a senha: '), 'não há como recuperá-la depois.'));
     },
-    async run(ctx) {
-        const f = ctx.files[0];
+    run: ctx => runBatch(ctx, async (f, sub) => {
         const o = ctx.opts;
-        ctx.progress(0.3, 'Criptografando...');
+        sub.progress(0.3, 'Criptografando...');
         const restrictions = [];
         if (!o.print) restrictions.push('--print=none');
         if (!o.copy) restrictions.push('--extract=n');
@@ -58,7 +60,7 @@ App.register({
             throw new Error('Não foi possível proteger o arquivo.');
         }
         return { blob: pdfBlob(r.output), name: baseName(f.file.name) + '-protegido.pdf' };
-    },
+    }),
 });
 
 App.register({
@@ -69,23 +71,25 @@ App.register({
     keywords: 'remover senha desproteger',
     icon: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.6-1.8"/>',
     accept: 'pdf',
+    multiple: true,
+    sortable: false,
     keepUnreadable: true,
     actionLabel: 'Desbloquear PDF',
-    doneTitle: 'Seu PDF foi desbloqueado',
+    doneTitle: 'Desbloqueio concluído',
+    zipName: () => 'pdfs-desbloqueados.zip',
     defaults: { pass: '' },
     options(ctx) {
         return h('div', { style: { display: 'grid', gap: '14px' } },
             F.field('Senha do PDF', passwordInput(ctx.opts.pass, v => ctx.opts.pass = v, 'Senha para abrir'),
-                'Se o arquivo abre sem senha mas bloqueia impressão ou cópia, deixe em branco.'),
+                'Se o arquivo abre sem senha mas bloqueia impressão ou cópia, deixe em branco. Com vários arquivos, a mesma senha é usada em todos.'),
             F.note('Use apenas em documentos seus ou que você tem autorização para desbloquear.'));
     },
-    async run(ctx) {
-        const f = ctx.files[0];
-        ctx.progress(0.2, 'Verificando...');
+    run: ctx => runBatch(ctx, async (f, sub) => {
+        sub.progress(0.2, 'Verificando...');
         let plain = false;
         try { plain = !(await PDFLib.PDFDocument.load(f.bytes, { updateMetadata: false })).isEncrypted; } catch (e) { /* protegido ou com erro */ }
         if (plain) throw new Error('Este PDF não tem senha nem restrições.');
-        ctx.progress(0.5, 'Removendo a proteção...');
+        sub.progress(0.5, 'Removendo a proteção...');
         const r = await Libs.qpdf(f.bytes, ['--decrypt', '--password=' + ctx.opts.pass, '{in}', '{out}']);
         if (!r.output?.length || (r.code !== 0 && r.code !== 3)) {
             if (/invalid password/i.test(r.errors)) {
@@ -94,5 +98,5 @@ App.register({
             throw new Error('Não foi possível desbloquear o arquivo.');
         }
         return { blob: pdfBlob(r.output), name: baseName(f.file.name) + '-desbloqueado.pdf' };
-    },
+    }),
 });

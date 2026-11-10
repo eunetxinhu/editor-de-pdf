@@ -257,29 +257,39 @@ function renderItemProps(ctx, box, item) {
     box.replaceChildren();
     const ed = ctx.state.editor;
     if (!item) {
-        box.append(h('span.hint', 'Clique em um item na página para ajustar ou mover. Teclas de seta movem com precisão.'));
+        box.append(h('span.hint', 'Clique em um item na página para ajustar ou mover. Setas movem com precisão, Ctrl+Z desfaz e Ctrl+D duplica.'));
         return;
     }
-    const redraw = () => ed.drawItems();
+    // guarda o estado para o "desfazer" antes de aplicar cada ajuste
+    const set = (what, fn) => v => { ed.touch(item, what); fn(v); ed.drawItems(); };
+    const fonts = [{ value: 'helv', label: 'Helvetica' }, { value: 'times', label: 'Times' }, { value: 'courier', label: 'Courier' }];
     const fields = [];
     if (item.type === 'text') {
         fields.push(
             h('div.row',
-                F.field('Tamanho', F.number(item.size, v => { item.size = Math.max(4, v || 4); redraw(); }, { min: 4, max: 200, step: 0.5 })),
-                F.field('Cor', F.color(item.color, v => { item.color = v; redraw(); }))),
+                F.field('Tamanho', F.number(item.size, set('size', v => item.size = Math.max(4, v || 4)), { min: 4, max: 200, step: 0.5 })),
+                F.field('Cor', F.color(item.color, set('color', v => item.color = v)))),
             h('div.row', { style: { alignItems: 'end' } },
-                F.field('Fonte', F.select([{ value: 'helv', label: 'Helvetica' }, { value: 'times', label: 'Times' }, { value: 'courier', label: 'Courier' }], item.font, v => { item.font = v; redraw(); })),
-                F.check('Negrito', item.bold, v => { item.bold = v; redraw(); })));
+                F.field('Fonte', F.select(fonts, item.font, set('font', v => item.font = v))),
+                F.check('Negrito', item.bold, set('bold', v => item.bold = v))));
     } else if (item.type === 'rect') {
         fields.push(h('div.row', { style: { alignItems: 'end' } },
-            F.field('Cor', F.color(item.fill, v => { item.fill = v; redraw(); })),
-            F.field('Opacidade', F.range(item.opacity, 0.1, 1, 0.05, v => { item.opacity = v; redraw(); }, v => Math.round(v * 100) + '%'))));
+            F.field('Cor', F.color(item.fill, set('fill', v => item.fill = v))),
+            F.field('Opacidade', F.range(item.opacity, 0.1, 1, 0.05, set('opacity', v => item.opacity = v), v => Math.round(v * 100) + '%'))));
+    } else if (item.type === 'path') {
+        fields.push(h('div.row', { style: { alignItems: 'end' } },
+            F.field('Cor', F.color(item.color, set('color', v => item.color = v))),
+            F.field('Espessura', F.range(item.width, 0.5, 8, 0.5, set('width', v => item.width = v), v => String(v).replace('.', ',') + ' pt'))));
+    } else if (item.type === 'image') {
+        fields.push(F.field('Opacidade', F.range(item.opacity ?? 1, 0.1, 1, 0.05, set('opacity', v => item.opacity = v), v => Math.round(v * 100) + '%')));
     }
-    box.append(h('b', { style: { fontSize: '.9rem' } }, { text: 'Texto selecionado', image: 'Imagem selecionada', rect: 'Retângulo selecionado' }[item.type]),
+    const title = { text: 'Texto selecionado', image: 'Imagem selecionada', rect: 'Retângulo selecionado', path: 'Traço selecionado' }[item.type];
+    box.append(h('b', { style: { fontSize: '.9rem' } }, title),
         ...fields,
         h('div.tool-buttons',
-            h('button.btn.btn-sm', { type: 'button', onclick: () => ed.repeatAll(item) }, 'Repetir em todas as páginas'),
-            h('button.btn.btn-sm.btn-danger', { type: 'button', onclick: () => ed.remove(item) }, icon('x'), 'Excluir')));
+            h('button.btn.btn-sm', { type: 'button', onclick: () => ed.duplicate(item) }, icon('copy'), 'Duplicar'),
+            h('button.btn.btn-sm.btn-danger', { type: 'button', onclick: () => ed.remove(item) }, icon('x'), 'Excluir')),
+        h('button.btn.btn-sm', { type: 'button', onclick: () => ed.repeatAll(item) }, 'Repetir em todas as páginas'));
 }
 
 function editorTextItem(ed, text, size = 14) {
@@ -301,6 +311,17 @@ function addImageItem(ed, img, widthFrac = 0.3) {
     return ed.add({ type: 'image', src: img.src, x: (pw - w) / 2, y: Math.min(ph - hh - 20, ph * 0.68), w, h: hh });
 }
 
+/* Assinaturas guardadas no navegador (nunca saem do computador) */
+function loadSavedSignatures() {
+    try {
+        const list = JSON.parse(localStorage.getItem('assinaturas') || '[]');
+        return Array.isArray(list) ? list.filter(s => s && typeof s.src === 'string' && s.src.startsWith('data:image/')) : [];
+    } catch (e) { return []; }
+}
+function saveSignatures(list) {
+    try { localStorage.setItem('assinaturas', JSON.stringify(list.slice(-6))); } catch (e) { /* sem espaço ou modo privado */ }
+}
+
 /* ---------- Assinar PDF ---------- */
 App.register({
     id: 'sign',
@@ -320,12 +341,18 @@ App.register({
     },
     options(ctx) {
         const st = ctx.state;
-        st.sigs = st.sigs || [];
+        st.sigs = st.sigs || loadSavedSignatures();
         const list = h('div.sig-list');
         const drawList = () => {
-            list.replaceChildren(...st.sigs.map(s => h('button.sig-thumb', {
-                type: 'button', title: 'Colocar na página atual', onclick: () => addImageItem(st.editor, s),
-            }, h('img', { src: s.src, alt: 'Assinatura' }))));
+            list.replaceChildren(...st.sigs.map(s => h('div.sig-wrap',
+                h('button.sig-thumb', {
+                    type: 'button', title: 'Colocar na página atual', onclick: () => addImageItem(st.editor, s),
+                }, h('img', { src: s.src, alt: 'Assinatura' })),
+                h('button.mini-btn.del', {
+                    type: 'button', title: 'Apagar esta assinatura', 'aria-label': 'Apagar esta assinatura',
+                    onclick: () => { st.sigs = st.sigs.filter(x => x !== s); saveSignatures(st.sigs); drawList(); },
+                }, icon('x')))));
+            if (!st.sigs.length) list.append(h('span.hint', 'Nenhuma assinatura ainda.'));
         };
         drawList();
         st.propsBox = h('div.props');
@@ -334,9 +361,10 @@ App.register({
         return h('div', { style: { display: 'grid', gap: '14px' } },
             h('button.btn.btn-primary', {
                 type: 'button',
-                onclick: () => openSignatureModal(sig => { st.sigs.push(sig); drawList(); addImageItem(st.editor, sig); }),
+                onclick: () => openSignatureModal(sig => { st.sigs.push(sig); saveSignatures(st.sigs); drawList(); addImageItem(st.editor, sig); }),
             }, icon('plus'), 'Criar assinatura'),
-            h('div.field', h('span.label', 'Suas assinaturas'), list, h('span.hint', 'Clique numa assinatura para colocá-la na página exibida.')),
+            h('div.field', h('span.label', 'Suas assinaturas'), list,
+                h('span.hint', 'Clique numa assinatura para colocá-la na página exibida. Elas ficam salvas só neste navegador para as próximas vezes.')),
             h('div.tool-buttons',
                 h('button.btn', { type: 'button', onclick: () => editorTextItem(st.editor, today, 12) }, 'Data de hoje'),
                 h('button.btn', { type: 'button', onclick: () => editorTextItem(st.editor, 'Nome completo', 12) }, 'Texto')),
@@ -355,8 +383,8 @@ App.register({
     id: 'edit',
     cat: 'editar',
     title: 'Editar PDF',
-    desc: 'Adicione textos e imagens, cubra informações ou destaque trechos.',
-    keywords: 'escrever texto adicionar imagem cobrir apagar destacar',
+    desc: 'Adicione textos, imagens, marcações e desenhos; cubra ou destaque trechos.',
+    keywords: 'escrever texto adicionar imagem cobrir apagar destacar desenhar preencher formulário marcar',
     icon: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
     accept: 'pdf',
     view: 'custom',
@@ -364,7 +392,11 @@ App.register({
     doneTitle: 'Seu PDF foi editado',
     validate: ctx => ctx.state.items?.length ? null : 'Adicione algum texto, imagem ou forma.',
     workspace(ctx, ws) {
-        new PageEditor(ctx, ws, { mode: 'items', onSelect: it => ctx.state.propsBox && renderItemProps(ctx, ctx.state.propsBox, it) });
+        new PageEditor(ctx, ws, {
+            mode: 'items',
+            onSelect: it => ctx.state.propsBox && renderItemProps(ctx, ctx.state.propsBox, it),
+            onDrawMode: on => ctx.state.syncDraw?.(on),
+        });
     },
     options(ctx) {
         const st = ctx.state;
@@ -384,12 +416,36 @@ App.register({
                 st.editor.add({ type: 'rect', fill, opacity, x: w * 0.3, y: hh * 0.4, w: w * 0.4, h: 24 });
             },
         }, label);
+        const mark = (kind, label) => h('button.btn', {
+            type: 'button', onclick: () => {
+                const { w, h: hh } = st.editor.pageSize();
+                const size = 16, x = w * 0.5, y = hh * 0.45;
+                st.editor.add(pathItem(MARKS[kind].map(l => l.map(q => [x + q[0] * size, y + q[1] * size])), '#111111', 2));
+            },
+        }, label);
+        st.pen = st.pen || { color: '#1d3fb8', width: 2 };
+        const penBox = h('div.row', { hidden: true, style: { alignItems: 'end' } },
+            F.field('Cor do traço', F.color(st.pen.color, v => { st.pen.color = v; st.editor.setDrawMode(true, st.pen); })),
+            F.field('Espessura', F.range(st.pen.width, 0.5, 8, 0.5, v => { st.pen.width = v; st.editor.setDrawMode(true, st.pen); }, v => String(v).replace('.', ',') + ' pt')));
+        const drawBtn = h('button.btn', {
+            type: 'button', 'aria-pressed': 'false',
+            onclick: () => st.editor.setDrawMode(!st.editor.drawing, st.pen),
+        }, 'Desenhar');
+        st.syncDraw = on => {
+            drawBtn.setAttribute('aria-pressed', String(on));
+            drawBtn.textContent = on ? 'Parar de desenhar' : 'Desenhar';
+            penBox.hidden = !on;
+        };
         return h('div', { style: { display: 'grid', gap: '14px' } },
             h('div.tool-buttons',
-                h('button.btn', { type: 'button', onclick: () => editorTextItem(st.editor, 'Digite aqui') }, 'Texto'),
+                h('button.btn', { type: 'button', onclick: () => { st.editor.setDrawMode(false); editorTextItem(st.editor, 'Digite aqui'); } }, 'Texto'),
                 h('button.btn', { type: 'button', onclick: () => imgInput.click() }, 'Imagem'),
+                mark('check', 'Marcar ✓'),
+                mark('cross', 'Marcar ✗'),
                 rect('#ffffff', 1, 'Cobrir (branco)'),
-                rect('#ffe14d', 0.4, 'Destacar')),
+                rect('#ffe14d', 0.4, 'Destacar'),
+                drawBtn),
+            penBox,
             imgInput,
             F.note(h('b', 'Cobrir '), 'esconde visualmente o que está embaixo, mas o texto original continua no arquivo. Para documentos sigilosos, use "Comprimir PDF" no modo Máxima depois, que transforma as páginas em imagem.'),
             st.propsBox);
