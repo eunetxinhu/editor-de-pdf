@@ -332,10 +332,21 @@ class ToolPage {
             e.preventDefault(); leave();
             if (e.dataTransfer?.files?.length && !this.busy && !this.done) this.addFiles(e.dataTransfer.files);
         };
+        // colar arquivos ou prints com Ctrl+V
+        const paste = e => {
+            const files = Array.from(e.clipboardData?.files || []);
+            if (!files.length || this.busy || this.done) return;
+            if (e.target.closest?.('input, textarea, [contenteditable="true"]')) return;
+            e.preventDefault();
+            this.addFiles(files.map(f => f.name && f.name !== 'image.png' ? f
+                : new File([f], `colado-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}.png`, { type: f.type })));
+        };
+        document.addEventListener('paste', paste);
         document.addEventListener('dragover', over);
         document.addEventListener('dragleave', leave);
         document.addEventListener('drop', drop);
         this.cleanups.push(() => {
+            document.removeEventListener('paste', paste);
             document.removeEventListener('dragover', over);
             document.removeEventListener('dragleave', leave);
             document.removeEventListener('drop', drop);
@@ -439,7 +450,7 @@ class ToolPage {
             },
                 icon('upload'),
                 h('strong', this.tool.multiple ? `Selecione os arquivos (${acc.label})` : `Selecione o arquivo (${acc.label})`),
-                h('span', 'ou arraste e solte aqui'),
+                h('span', 'ou arraste e solte aqui · Ctrl+V também funciona'),
                 h('div', h('span.btn.btn-primary', 'Escolher ' + (this.tool.multiple ? 'arquivos' : 'arquivo')))));
             return;
         }
@@ -524,7 +535,9 @@ class ToolPage {
         this.done = true;
         this.busy = false;
         const outFile = new File([out.blob], out.name, { type: out.blob.type });
-        const extra = this.tool.resultInfo?.(this, out, list);
+        const info = this.tool.resultInfo?.(this, out, list);
+        const failed = batchErrorNote(this);
+        const extra = info || failed ? h('span', info, info && failed ? h('br') : null, failed) : null;
         const isPdfOut = isPdf(outFile);
         const next = isPdfOut
             ? (this.tool.next || ['compress', 'merge', 'sign', 'watermark', 'page-numbers', 'protect', 'organize'])
@@ -758,6 +771,45 @@ class ToolPage {
             box.replaceChildren(h('span.ph', 'sem prévia'));
         }
     }
+}
+
+/**
+ * Processa cada arquivo da lista com fn(arquivo, sub), onde sub.progress(fração, texto)
+ * já desconta a parte do lote. Com vários arquivos, um erro não interrompe os demais:
+ * fica registrado em ctx.state.batchErrors e aparece na tela de resultado.
+ */
+async function runBatch(ctx, fn) {
+    const files = ctx.files, n = files.length;
+    const outs = [];
+    ctx.state.batchErrors = [];
+    ctx.state.batch = [];
+    for (let i = 0; i < n; i++) {
+        const f = files[i];
+        const sub = {
+            state: ctx.state, opts: ctx.opts,
+            progress: (frac, text) => ctx.progress((i + Math.max(0, Math.min(1, frac))) / n,
+                n > 1 ? `Arquivo ${i + 1} de ${n}: ${text || ''}` : text),
+        };
+        try {
+            const out = await fn(f, sub);
+            (Array.isArray(out) ? out : [out]).forEach(o => outs.push(o));
+            ctx.state.batch.push({ file: f, out });
+        } catch (e) {
+            if (n === 1) throw e;
+            console.error(e);
+            ctx.state.batchErrors.push(`${f.file.name}: ${e.message}`);
+        }
+    }
+    if (!outs.length) throw new Error(ctx.state.batchErrors[0] || 'Nada foi gerado.');
+    return outs;
+}
+
+/** Aviso, na tela de resultado, dos arquivos do lote que falharam */
+function batchErrorNote(ctx) {
+    const errs = ctx.state.batchErrors || [];
+    if (!errs.length) return null;
+    return h('span.batch-errors', `${errs.length} ${errs.length === 1 ? 'arquivo não pôde ser processado' : 'arquivos não puderam ser processados'}: `,
+        errs.join(' · '));
 }
 
 /** Pré-visualização: renderiza uma página de um PDF (bytes) dentro de uma caixa */

@@ -14,6 +14,16 @@ Ferramentas de PDF no estilo do iLovePDF, só que **100% no navegador**: nenhum 
 | Segurança | Proteger PDF (AES-256, com restrições de impressão/cópia/edição) · Desbloquear PDF |
 | Outras | Gerar contrato (junta PDFs e fotos com o nome do beneficiário) · Converter imagem (JPG/PNG/WEBP, redimensionar) |
 
+Destaques:
+
+- **Vários arquivos de uma vez** em Comprimir, Reparar, Proteger, Desbloquear, PDF para imagem, PDF para Word e Word para PDF (o resultado sai em .zip; se um arquivo falhar, os outros seguem).
+- **Comprimir** recomprime JPEGs e também imagens sem perdas (tipo PNG) dentro do PDF, e pode remover metadados.
+- **Juntar** cria marcadores com o nome de cada arquivo e pode inserir páginas em branco para impressão frente e verso.
+- **Editar** tem desfazer/refazer (Ctrl+Z / Ctrl+Y), duplicar (Ctrl+D), marcas ✓ e ✗ para formulários e desenho à mão livre.
+- **Assinar** guarda as assinaturas no navegador (localStorage) para as próximas vezes.
+- **PDF para Word** mantém negrito, itálico e alinhamento centralizado/justificado.
+- Arquivos podem ser colados com **Ctrl+V** em qualquer ferramenta.
+
 Depois de processar, a tela de resultado permite **continuar com o mesmo arquivo** em outra ferramenta (ex.: juntar → comprimir → proteger).
 
 ## Como funciona
